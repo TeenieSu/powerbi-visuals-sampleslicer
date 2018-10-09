@@ -76,7 +76,7 @@ module powerbi.extensibility.visual {
             height: 0,
             width: 0,
             hoverColor: '#212121',
-            selectedColor: '#BDD7EE',
+            selectedColor: '#ffffff',
             unselectedColor: '#ffffff',
             marginLeft: 8,
             transparency: 0,

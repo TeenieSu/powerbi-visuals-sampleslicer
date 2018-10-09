@@ -1,9 +1,15 @@
 # PowerBI Slicer custom visual sample
 [![Build Status](https://travis-ci.org/Microsoft/powerbi-visuals-sampleslicer.svg?branch=master)](https://travis-ci.org/Microsoft/powerbi-visuals-sampleslicer)
 
+## Fork purpose
+Quickly modify sample code to accommodate date range slicer, with specific date range pick like 'Last Week' and 'Last Month'.
+
+
+### Original statement
 Demonstrates the use of the Advanced Filtering API introduced in the version 1.7 of [PowerBI Visuals Tools](https://github.com/Microsoft/PowerBI-visuals-tools). 
 
 This PowerBI Custom Visual relies on the Advanced Filter API for bulk data-point selection and [PowerBI Visuals Interactivity Utils](https://github.com/Microsoft/powerbi-visuals-utils-interactivityutils) for discrete data-point selection.
+
 
 ### Understanding the visual
 The visual lets the user select numeric data inputs to be displayed in all other visuals in the same report sheet. The user can either select discrete values or a range by adjusting the sliders. 

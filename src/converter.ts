@@ -56,21 +56,25 @@ module powerbi.extensibility.visual {
                         .withCategory(this.category, categoryIndex)
                         .createSelectionId();
 
+                    let datetime: Date = new Date(this.categoryValues[categoryIndex]);
+
                     this.dataPoints.push({
                         identity: categorySelectionId as powerbi.visuals.ISelectionId,
                         category: categoryValue.toString(),
                         selected: true,
                         filtered: false,
+                        value: datetime,
                         isSelectedRangePoint: scalableRange.isActive() && SampleSlicerConverter.isNumberWithinRange(categoryValue, scalableRange.getValue())
                     });
                 }
 
                 scalableRange.setScalingTransformationDomain({
-                    min: d3.min(this.categoryValues),
-                    max: d3.max(this.categoryValues),
+                    min: (<Date>d3.min(this.categoryValues)).getTime(),
+                    max: (<Date>d3.max(this.categoryValues)).getTime(),
                 });
             }
         }
+        
 
         private static isNumberWithinRange(theNumber: number, subRange: ValueRange<number>): boolean {
             if (subRange.min && subRange.min > theNumber) {

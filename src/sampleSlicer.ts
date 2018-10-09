@@ -70,6 +70,7 @@ module powerbi.extensibility.visual {
         category?: string;
         isSelectedRangePoint?: boolean;
         filtered?: boolean;
+        value?: Date;
     }
 
     export interface SampleSlicerCallbacks {
@@ -95,7 +96,6 @@ module powerbi.extensibility.visual {
         private startControl: Selection<any>;
         private endControl: Selection<any>;
 
-
         private slicerBody: Selection<any>;
         private rangeBody: Selection<any>;
         private startContainer: Selection<any>;
@@ -117,6 +117,8 @@ module powerbi.extensibility.visual {
 
         private behavior: SelectionBehavior;
         private settings: Settings;
+
+        private static slicerCategories: SampleSlicerDataPoint[];
 
         public static DefaultFontFamily: string = "helvetica, arial, sans-serif";
         public static DefaultFontSizeInPt: number = 11;
@@ -178,12 +180,17 @@ module powerbi.extensibility.visual {
 
             let categories: DataViewCategoricalColumn = dataView.categorical.categories[0];
 
+            SampleSlicer.slicerCategories = converter.dataPoints;
+            const rangeSlicer = [SampleSlicer.slicerCategories[0], {...SampleSlicer.slicerCategories[0]}];
+            rangeSlicer[0].category = "Last Week";
+            rangeSlicer[1].category = "Last Month";
+
             let slicerData: SampleSlicerData;
             slicerData = {
                 categorySourceName: categories.source.displayName,
                 formatString: valueFormatter.getFormatStringByColumn(categories.source),
                 slicerSettings: slicerSettings,
-                slicerDataPoints: converter.dataPoints
+                slicerDataPoints: rangeSlicer
             };
 
             return slicerData;
@@ -197,6 +204,7 @@ module powerbi.extensibility.visual {
             this.interactivityService = createInteractivityService(options.host);
 
             this.settings = defaultSettings;
+
         }
 
         public update(options: VisualUpdateOptions) {
@@ -350,7 +358,7 @@ module powerbi.extensibility.visual {
                 return;
             }
 
-            this.restoreFilter(data);
+            //this.restoreFilter(data);
 
             if (this.slicerData) {
                 if (this.isSelectionSaved) {
@@ -389,8 +397,8 @@ module powerbi.extensibility.visual {
         }
 
         public createInputElement(control: JQuery): JQuery {
-            let $element: JQuery = $('<input type="text"/>')
-                .attr("type", "text")
+            let $element: JQuery = $('<input type="date"/>')
+                .attr("type", "date")
                 .addClass(SampleSlicer.InputClass.className)
                 .appendTo(control);
             return $element;
@@ -442,6 +450,7 @@ module powerbi.extensibility.visual {
 
             this.$start = this.createInputElement($startControl);
             this.$end = this.createInputElement($endControl);
+
 
             let slicerContainer: Selection<any> = d3.select(this.$root.get(0))
                 .append('div')
@@ -564,9 +573,17 @@ module powerbi.extensibility.visual {
                 // populate slider event handlers
                 this.slider.on("change", (data: any[], index: number, values: any) => {
                     this.behavior.scalableRange.setScaledValue({ min: values[0], max: values[1] });
+                    this.updateSliderInputTextboxes();
                     this.behavior.updateOnRangeSelectonChange();
                 });
 
+                const initEnd: Date = new Date();
+                let initStart: Date = new Date();
+                initStart.setMonth(initEnd.getMonth()-1);
+                this.behavior.scalableRange.setValue({min: initStart.getTime(), max: initEnd.getTime()});
+                let scaledValue = this.behavior.scalableRange.getScaledValue();
+                this.slider.set([scaledValue.min, scaledValue.max]);
+                this.behavior.updateOnRangeSelectonChange();
             } else {
                 // get the scaled range value
                 // and use it to set the slider
@@ -576,12 +593,18 @@ module powerbi.extensibility.visual {
         }
 
         public updateSliderInputTextboxes(): void {
-            this.$start.val(this.formatValue(this.behavior.scalableRange.getValue().min));
-            this.$end.val(this.formatValue(this.behavior.scalableRange.getValue().max));
+            const range: ValueRange<number> = this.behavior.scalableRange.getValue();
+            const domain: ValueRange<number> = this.behavior.scalableRange.getScalingTransformationDomain();
+            this.$start.val(this.formatValue(range.min == null? domain.min:range.min));
+            this.$end.val(this.formatValue(range.max == null? domain.max:range.max));
+        }
+
+        public updateInputBoxCallback = () => {
+            this.updateSliderInputTextboxes();
         }
 
         public formatValue(value: number): string {
-            return value != null ? valueFormatter.format(value, "#") : '';
+            return new Date(value).toISOString().slice(0, 10);
         }
 
         private onRangeInputTextboxChange(inputString: string, rangeValueType: RangeValueType, supressFilter: boolean = false): void {
@@ -590,7 +613,7 @@ module powerbi.extensibility.visual {
             if (!inputString) {
                 inputValue = null;
             } else {
-                inputValue = parseFloat(inputString);
+                inputValue = new Date(inputString).getTime();
                 if (isNaN(inputValue)) {
                     inputValue = null;
                 }
@@ -689,7 +712,7 @@ module powerbi.extensibility.visual {
                 .classed(SampleSlicer.LabelTextSelector.className, true);
 
             labelTextSelection.style({
-                'font-size': PixelConverter.fromPoint(settings.slicerText.textSize),
+                'font-size': '11px',
             });
 
             labelTextSelection
@@ -757,11 +780,13 @@ module powerbi.extensibility.visual {
                         slicerItemContainers: Selection<any> = slicerBody.selectAll(SampleSlicer.ItemContainerSelector.selectorName);
 
                     let behaviorOptions: SampleSlicerBehaviorOptions = {
-                        dataPoints: data.slicerDataPoints,
+                        dataPoints: SampleSlicer.slicerCategories,
                         slicerItemContainers: slicerItemContainers,
                         interactivityService: this.interactivityService,
                         slicerSettings: data.slicerSettings,
-                        isSelectionLoaded: this.isSelectionLoaded
+                        isSelectionLoaded: this.isSelectionLoaded,
+                        sliderCallback: this.sliderSetCallback,
+                        inputBoxUpdateCallback: this.updateInputBoxCallback
                     };
 
                     this.interactivityService.bind(data.slicerDataPoints, this.behavior, behaviorOptions, {
@@ -778,20 +803,26 @@ module powerbi.extensibility.visual {
             }
         }
 
+        private sliderSetCallback = (values: number[]) => {
+            this.behavior.scalableRange.setValue({min: values[0], max: values[1]});
+            let scaledValue = this.behavior.scalableRange.getScaledValue();
+            this.slider.set([scaledValue.min, scaledValue.max]);
+        }
+
         private createSearchHeader(container: JQuery): void {
             let counter: number = 0;
 
             this.$searchHeader = $("<div>")
                 .appendTo(container)
                 .addClass("searchHeader")
-                .addClass("show");
+                .addClass("hidden");
 
             $("<div>").appendTo(this.$searchHeader)
                 .attr("title", "Search")
                 .addClass("search");
 
             this.$searchInput = $("<input>").appendTo(this.$searchHeader)
-                .attr("type", "text")
+                .attr("type", "date")
                 .attr("drag-resize-disabled", "true")
                 .addClass("searchInput")
                 .on("input", () => this.visualHost.persistProperties(<VisualObjectInstancesToPersist>{

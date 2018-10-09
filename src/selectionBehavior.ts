@@ -40,6 +40,8 @@ module powerbi.extensibility.visual {
         interactivityService: IInteractivityService;
         slicerSettings: Settings;
         isSelectionLoaded: boolean;
+        sliderCallback: Function;
+        inputBoxUpdateCallback: Function;
     }
 
     export class SelectionBehavior implements IInteractiveBehavior {
@@ -54,6 +56,10 @@ module powerbi.extensibility.visual {
         private options: SampleSlicerBehaviorOptions;
         private dataPoints: SampleSlicerDataPoint[];
         private callbacks: SampleSlicerCallbacks;
+        private lastWeekSeleted: boolean = false;
+        private lastMonthSeleted: boolean = false;
+        private minDate: Date;
+        private maxDate: Date;
 
         constructor(callbacks: SampleSlicerCallbacks) {
             this.scalableRange = new ScalableRange();
@@ -73,14 +79,51 @@ module powerbi.extensibility.visual {
             this.options = options;
 
             this.selectionHandler = selectionHandler;
+            this.minDate = _.minBy(this.dataPoints, p => p.value).value;
+            this.maxDate = _.maxBy(this.dataPoints, p => p.value).value;
 
             slicers.on("click", (dataPoint: SampleSlicerDataPoint, index: number) => {
                 (d3.event as MouseEvent).preventDefault();
 
-                this.clearRangeSelection();
+                let startDate: Date;
+                const endDate: Date = new Date();
+                let selectedDataPoints: SampleSlicerDataPoint[] = [];
+                if(index == 0) {
+                    // Assume 0 as "Last Week"
+                    selectionHandler.handleClearSelection();
+                    if(this.lastWeekSeleted) {
+                        this.options.sliderCallback([this.minDate.getTime(), endDate.getTime()]);
+                    } else {
+                        startDate = new Date();
+                        startDate.setDate(endDate.getDate()-7);
+                        selectedDataPoints = this.dataPoints.filter(d => d.value>=startDate && d.value<=endDate);
+                        this.options.sliderCallback([startDate.getTime(), endDate.getTime()]);
+                    }
+                    this.lastWeekSeleted = !this.lastWeekSeleted;
+                    this.lastMonthSeleted = false;
+                } else if(index == 1) {
+                    selectionHandler.handleClearSelection();
+                    if(this.lastMonthSeleted) {
+                        this.options.sliderCallback([this.minDate.getTime(), this.maxDate.getTime()]);
+                    } else {
+                        startDate = new Date();
+                        startDate.setDate(endDate.getDate()-30);
+                        selectedDataPoints = this.dataPoints.filter(d => d.value>=startDate && d.value<=endDate);
+                        this.options.sliderCallback([startDate.getTime(), this.maxDate.getTime()]);
+                    }
+                    this.lastMonthSeleted = !this.lastMonthSeleted;
+                    this.lastWeekSeleted = false;
+                }
+
+                this.options.inputBoxUpdateCallback();
 
                 /* update selection state */
-                selectionHandler.handleSelection(dataPoint, true /* isMultiSelect */);
+                selectedDataPoints.forEach( d => {
+                    d.filtered = true;
+                    d.selected = true;
+                    d.isSelectedRangePoint = true;
+                    selectionHandler.handleSelection(d, true);
+                });
 
                 /* send selection state to the host*/
                 selectionHandler.applySelectionFilter();
@@ -138,17 +181,19 @@ module powerbi.extensibility.visual {
             if (value.min) {
                 conditions.push({
                     operator: "GreaterThan",
-                    value: value.min
+                    value: new Date(value.min).toJSON()
                 });
             }
 
             if (value.max) {
                 conditions.push({
                     operator: "LessThan",
-                    value: value.max
+                    value: new Date(value.max).toJSON()
                 });
             }
 
+            const sliderRange: any = this.scalableRange.getScalingTransformationDomain();
+            
             let filter: IAdvancedFilter = new window['powerbi-models'].AdvancedFilter(target, "And", conditions);
             this.callbacks.applyAdvancedFilter(filter);
         }
